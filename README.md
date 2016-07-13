@@ -16,7 +16,7 @@ In visual mode, it will formater the whole buffer
 
 ##Example config
 
-  noremap <leader>y :YapfFormat<CR>
-  vnoremap <leader>y :YapfFormat 'full'<CR>
+    noremap <leader>y :YapfFormat<CR>
+    vnoremap <leader>y :YapfFormat 'full'<CR>
   
 It inspired by the pignacio/vim-yapf-format
