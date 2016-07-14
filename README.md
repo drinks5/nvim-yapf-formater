@@ -7,7 +7,11 @@ yapf formatter in nvim, it's use the async feature of neovim!
 * auto find the current tag, and then format it, it was so quickly!
 * it use the python client with neovim.
 
+##Install 
 
+    with the vim-plug
+    Plug 'drinksober/nvim-yapf-formater'
+    
 ##Normal mode
 In normal mode, it will find the range of current tag(function or class) in current line, if fail, if will format the whole buffer
 
@@ -19,4 +23,7 @@ In visual mode, it will formater the whole buffer
     noremap <leader>y :YapfFormat<CR>
     vnoremap <leader>y :YapfFormat 'full'<CR>
   
+###combine with the neomake
+
+    autocmd BufWritePost * YapfFormater<CR>:write<CR>Neomake
 It inspired by the pignacio/vim-yapf-format
