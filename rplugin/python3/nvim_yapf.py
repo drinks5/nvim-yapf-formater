@@ -11,8 +11,8 @@ try:
     FormatCode = yapf_api.FormatCode
     _has_yapf = True
 except ImportError:
-    sys.stderr.write("Could not import yapf_api. Have you set "
-                     "g:yapf_format_yapf_location correctly?")
+    sys.stderr.write(
+        "Could not import yapf_api., Please use sudo pip install yapf at first")
 logger = logging.getLogger('nvim_yapf')
 logger.setLevel(logging.DEBUG)
 
@@ -36,15 +36,15 @@ def log(key='key', value='value'):
 
 
 @neovim.plugin
-class TestPlugin(object):
+class YapfPlugin(object):
     def __init__(self, nvim):
         self.nvim = nvim
 
-    @neovim.command("YapfFormat", range='', nargs='*')
-    def testcommand(self, args, range):
-        if not _has_yapf:
-            return
+    @neovim.command("YapfFormater", range='', nargs='*')
+    def yapf_command(self, args, range):
         self.buffer = self.nvim.current.buffer
+        if not _has_yapf or not self.buffer.name.endswith('.py'):
+            return
         self.cur_line = self.buffer[:].index(self.nvim.current.line)
         self.full_format = args and args[0] == 'full'
         self.range = (self.full_format and [0, len(self.buffer)]) or None
@@ -56,7 +56,13 @@ class TestPlugin(object):
         up_text = self.buffer[:self.cur_line]
         for index, line in sorted(enumerate(up_text), reverse=True):
             if line and not line.startswith(' '):
-                return index
+                space = 0
+                for line in self.buffer[index:self.cur_line]:
+                    if not line:
+                        space += 1
+                    else:
+                        break
+                return index + space
         return 0
 
     def _get_down(self):
@@ -78,15 +84,20 @@ class TestPlugin(object):
         text = '\n'.join(scope_text)
         return text, up, down
 
-    def _format(self, ):
+    def _format(self):
         text, up, down = self._get_scope()
-        try:
-            formated_text, ok = FormatCode(text, filename='<stdin>')
-        except (SyntaxError, IndentationError):
+        formated_text, ok = self._try(text)
+        if not ok:
             text = '\n'.join(self.buffer[:])
             up, down = 0, len(self.buffer[:])
-            formated_text, ok = FormatCode(text, filename='<stdin>')
+            formated_text, ok = self._try(text)
         if not ok:
             return
         formated_range = formated_text.splitlines()
         self.nvim.current.buffer[up:down] = formated_range
+
+    def _try(self, text):
+        try:
+            return FormatCode(text, filename='<stdin>')
+        except (SyntaxError, IndentationError):
+            return text, False
