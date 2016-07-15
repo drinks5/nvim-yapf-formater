@@ -23,7 +23,7 @@ In visual mode, it will formater the whole buffer
     noremap <leader>y :YapfFormat<CR>
     vnoremap <leader>y :YapfFormat 'full'<CR>
   
-###combine with the neomake
+###use the autocmd with format the scope of the tag
 
-    autocmd BufWritePost * YapfFormater<CR>:write<CR>Neomake
+    autocmd BufWritePre * YapfFormater
 It inspired by the pignacio/vim-yapf-format

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import, division, unicode_literals
 
+import difflib
 import logging
 import sys
 
@@ -13,22 +14,24 @@ try:
 except ImportError:
     sys.stderr.write(
         "Could not import yapf_api., Please use sudo pip install yapf at first")
-logger = logging.getLogger('nvim_yapf')
-logger.setLevel(logging.DEBUG)
+DEBUG = False
+if DEBUG:
+    logger = logging.getLogger('nvim_yapf')
+    logger.setLevel(logging.DEBUG)
 
-fh = logging.FileHandler('nvim_yapf.log')
-fh.setLevel(logging.DEBUG)
+    fh = logging.FileHandler('nvim_yapf.log')
+    fh.setLevel(logging.DEBUG)
 
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
 
-formatter = logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-fh.setFormatter(formatter)
-ch.setFormatter(formatter)
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    ch.setFormatter(formatter)
 
-logger.addHandler(fh)
-logger.addHandler(ch)
+    logger.addHandler(fh)
+    logger.addHandler(ch)
 
 
 def log(key='key', value='value'):
@@ -53,7 +56,7 @@ class YapfPlugin(object):
         self.nvim.eval('setpos(".", {})'.format(pos))
 
     def _get_up(self):
-        up_text = self.buffer[:self.cur_line]
+        up_text = self.buffer[:self.cur_line + 1]
         for index, line in sorted(enumerate(up_text), reverse=True):
             if line and not line.startswith(' '):
                 space = 0
@@ -66,7 +69,7 @@ class YapfPlugin(object):
         return 0
 
     def _get_down(self):
-        down_text = self.buffer[self.cur_line:]
+        down_text = self.buffer[self.cur_line:+1]
         for index, line in enumerate(down_text, self.cur_line):
             if line and not line.startswith(' '):
                 space = 0
@@ -84,20 +87,32 @@ class YapfPlugin(object):
         text = '\n'.join(scope_text)
         return text, up, down
 
+    def _has_diff(self):
+        name = self.buffer.name
+        with open(name, 'r') as f:
+            result = difflib.SequenceMatcher(None, f.read(),
+                                             '\n'.join(self.buffer[:]))
+            if not result.ratio() == 1.0:
+                return True
+
     def _format(self):
         text, up, down = self._get_scope()
+        if not self._has_diff():
+            return
         formated_text, ok = self._try(text)
         if not ok:
             text = '\n'.join(self.buffer[:])
             up, down = 0, len(self.buffer[:])
-            formated_text, ok = self._try(text)
+            formated_text, ok = self._try(text, final=True)
         if not ok:
             return
         formated_range = formated_text.splitlines()
         self.nvim.current.buffer[up:down] = formated_range
 
-    def _try(self, text):
+    def _try(self, text, final=False):
         try:
-            return FormatCode(text, filename='<stdin>')
-        except (SyntaxError, IndentationError):
+            return FormatCode(text, filename='<stdin>', verify=False)
+        except (SyntaxError, IndentationError) as err:
+            if final:
+                sys.stderr.write(str(err))
             return text, False
