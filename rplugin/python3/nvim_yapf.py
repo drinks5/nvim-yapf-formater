@@ -48,12 +48,10 @@ class YapfPlugin(object):
 
     @neovim.command("YapfFormater", range='', nargs='*')
     def yapf_command(self, args, range):
-        self.buffer = self.nvim.current.buffer
-        self.__buffer_name = self.buffer.name
+        self.buffer = self.nvim.buffers[self.nvim.current.buffer.number]
         if not _has_yapf or not self.buffer.name.endswith('.py'):
             return
-        self.cur_line = range and range[0] or (
-            self.buffer[:].index(self.nvim.current.line))
+        self.cur_line = range[0]
         self.full_format = args and args[0] == 'full'
         self.range = (self.full_format and [0, len(self.buffer)]) or None
         self._format()
@@ -95,7 +93,7 @@ class YapfPlugin(object):
             origi = f.read()
         result = difflib.SequenceMatcher(None, origi,
                                          '\n'.join(self.buffer[:]))
-        if not result.ratio() == 1.0:
+        if result.ratio() != 1.0:
             return True
 
     def _format(self):
@@ -112,8 +110,8 @@ class YapfPlugin(object):
         formated_range = formated_text.splitlines()
 
         self.pos = self.nvim.eval('getpos(".")')
-        self.nvim.current.buffer[up:down] = formated_range
-        if self.buffer.name == self.__buffer_name:
+        self.buffer[up:down] = formated_range
+        if self.nvim.current.buffer == self.buffer:
             self.nvim.eval('setpos(".", {})'.format(self.pos))
 
     def _try(self, text, final=False):
