@@ -38,6 +38,9 @@ def log(key='key', value='value'):
     logger.info('{}={}'.format(key, value))
 
 
+buffer_dict = {}
+
+
 @neovim.plugin
 class YapfPlugin(object):
     def __init__(self, nvim):
@@ -46,14 +49,14 @@ class YapfPlugin(object):
     @neovim.command("YapfFormater", range='', nargs='*')
     def yapf_command(self, args, range):
         self.buffer = self.nvim.current.buffer
+        self.__buffer_name = self.buffer.name
         if not _has_yapf or not self.buffer.name.endswith('.py'):
             return
-        self.cur_line = self.buffer[:].index(self.nvim.current.line)
+        self.cur_line = range and range[0] or (
+            self.buffer[:].index(self.nvim.current.line))
         self.full_format = args and args[0] == 'full'
         self.range = (self.full_format and [0, len(self.buffer)]) or None
-        pos = self.nvim.eval('getpos(".")')
         self._format()
-        self.nvim.eval('setpos(".", {})'.format(pos))
 
     def _get_up(self):
         up_text = self.buffer[:self.cur_line + 1]
@@ -88,12 +91,12 @@ class YapfPlugin(object):
         return text, up, down
 
     def _has_diff(self):
-        name = self.buffer.name
-        with open(name, 'r') as f:
-            result = difflib.SequenceMatcher(None, f.read(),
-                                             '\n'.join(self.buffer[:]))
-            if not result.ratio() == 1.0:
-                return True
+        with open(self.buffer.name, 'r') as f:
+            origi = f.read()
+        result = difflib.SequenceMatcher(None, origi,
+                                         '\n'.join(self.buffer[:]))
+        if not result.ratio() == 1.0:
+            return True
 
     def _format(self):
         text, up, down = self._get_scope()
@@ -107,7 +110,11 @@ class YapfPlugin(object):
         if not ok:
             return
         formated_range = formated_text.splitlines()
+
+        self.pos = self.nvim.eval('getpos(".")')
         self.nvim.current.buffer[up:down] = formated_range
+        if self.buffer.name == self.__buffer_name:
+            self.nvim.eval('setpos(".", {})'.format(self.pos))
 
     def _try(self, text, final=False):
         try:
