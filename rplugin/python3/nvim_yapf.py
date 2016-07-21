@@ -113,6 +113,10 @@ class YapfPlugin(object):
         self.buffer[up:down] = formated_range
         if self.nvim.current.buffer == self.buffer:
             self.nvim.eval('setpos(".", {})'.format(self.pos))
+        self.nvim.command('write')
+        self.nvim.command('Neomake')
+        self.nvim.command('echom "yapf fortamed range from {} to {}"'.format(
+            up, down))
 
     def _try(self, text, final=False):
         try:
