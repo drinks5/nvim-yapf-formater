@@ -5,6 +5,7 @@ yapf formatter in nvim, it's use the async feature of neovim!
 ##Feathers
 * async, when excute the format command, you can move the cursor free!
 * auto find the current tag, and then format it, it was so quickly!
+* diff the saved text with the buffer, if didn't has diff, ignored!
 * it use the python client with neovim.
 
 ##Install 
@@ -25,5 +26,4 @@ In visual mode, it will formater the whole buffer
   
 ###use the autocmd with format the scope of the tag
 
-    autocmd BufWritePre * YapfFormater
-It inspired by the pignacio/vim-yapf-format
+    autocmd InsertLeave * YapfFormater

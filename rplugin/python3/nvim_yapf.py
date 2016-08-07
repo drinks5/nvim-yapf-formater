@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import, division, unicode_literals
-
 import difflib
-import logging
-import sys
+from itertools import takewhile
 
 import neovim
 
@@ -12,44 +9,22 @@ try:
     FormatCode = yapf_api.FormatCode
     _has_yapf = True
 except ImportError:
-    sys.stderr.write(
-        "Could not import yapf_api., Please use sudo pip install yapf at first")
-DEBUG = False
-if DEBUG:
-    logger = logging.getLogger('nvim_yapf')
-    logger.setLevel(logging.DEBUG)
-
-    fh = logging.FileHandler('nvim_yapf.log')
-    fh.setLevel(logging.DEBUG)
-
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
-
-    formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    fh.setFormatter(formatter)
-    ch.setFormatter(formatter)
-
-    logger.addHandler(fh)
-    logger.addHandler(ch)
-
-
-def log(key='key', value='value'):
-    logger.info('{}={}'.format(key, value))
-
-
-buffer_dict = {}
+    _has_yapf = False
 
 
 @neovim.plugin
 class YapfPlugin(object):
     def __init__(self, nvim):
         self.nvim = nvim
+        self.buffer = self.nvim.buffers[self.nvim.current.buffer.number]
+
+    def echo(self, message):
+        self.nvim.command('echom "{}"'.format(message))
 
     @neovim.command("YapfFormater", range='', nargs='*')
     def yapf_command(self, args, range):
-        self.buffer = self.nvim.buffers[self.nvim.current.buffer.number]
         if not _has_yapf or not self.buffer.name.endswith('.py'):
+            self.echo('please install yapf first\npip install yapf')
             return
         self.cur_line = range[0]
         self.full_format = args and args[0] == 'full'
@@ -57,29 +32,22 @@ class YapfPlugin(object):
         self._format()
 
     def _get_up(self):
-        up_text = self.buffer[:self.cur_line + 1]
-        for index, line in sorted(enumerate(up_text), reverse=True):
-            if line and not line.startswith(' '):
-                space = 0
-                for line in self.buffer[index:self.cur_line]:
-                    if not line:
-                        space += 1
-                    else:
-                        break
-                return index + space
+        up_text = self.buffer[:self.cur_line]
+        for line in reversed(up_text):
+            index = get_index(self.buffer, line)
+            if is_not_blank(line):
+                lines = takewhile(is_blnak, self.buffer[index:self.cur_line])
+                return index + min(2, len(list(lines)))
         return 0
 
     def _get_down(self):
-        down_text = self.buffer[self.cur_line:+1]
-        for index, line in enumerate(down_text, self.cur_line):
-            if line and not line.startswith(' '):
-                space = 0
-                for line in reversed(self.buffer[self.cur_line:index]):
-                    if not line:
-                        space += 1
-                    else:
-                        break
-                return index - space
+        down_text = self.buffer[self.cur_line:]
+        for line in down_text:
+            index = get_index(self.buffer, line)
+            if is_not_blank(line):
+                lines = takewhile(is_blnak,
+                                  reversed(self.buffer[self.cur_line:index]))
+                return index - min(2, len(list(lines)))
         return len(self.buffer[:])
 
     def _get_scope(self):
@@ -88,23 +56,15 @@ class YapfPlugin(object):
         text = '\n'.join(scope_text)
         return text, up, down
 
-    def _has_diff(self):
-        with open(self.buffer.name, 'r') as f:
-            origi = f.read()
-        result = difflib.SequenceMatcher(None, origi,
-                                         '\n'.join(self.buffer[:]))
-        if result.ratio() != 1.0:
-            return True
-
     def _format(self):
         text, up, down = self._get_scope()
-        if not self._has_diff():
+        if not self.full_format and not _has_diff(self.buffer, up, down,
+                                                  self.echo):
             return
         formated_text, ok = self._try(text)
         if not ok:
-            text = '\n'.join(self.buffer[:])
-            up, down = 0, len(self.buffer[:])
-            formated_text, ok = self._try(text, final=True)
+            text, up, down = '\n'.join(self.buffer[:]), 0, len(self.buffer[:])
+            formated_text, ok = self._try(text)
         if not ok:
             return
         formated_range = formated_text.splitlines()
@@ -114,14 +74,37 @@ class YapfPlugin(object):
         if self.nvim.current.buffer == self.buffer:
             self.nvim.eval('setpos(".", {})'.format(self.pos))
         self.nvim.command('write')
-        self.nvim.command('Neomake')
-        self.nvim.command('echom "yapf fortamed range from {} to {}"'.format(
-            up, down))
+        self.echo('format range from {} to {}'.format(up, down))
 
     def _try(self, text, final=False):
         try:
             return FormatCode(text, filename='<stdin>', verify=False)
         except (SyntaxError, IndentationError) as err:
-            if final:
-                sys.stderr.write(str(err))
+            self.echo(str(err))
             return text, False
+
+
+def _has_diff(buffer, up, down, echo=None):
+    try:
+        with open(buffer.name, 'r') as f:
+            origin = '\n'.join(f.read().splitlines()[up:down])
+        modified_text = '\n'.join(buffer[up:down])
+        result = difflib.SequenceMatcher(None, origin, modified_text)
+        if result.ratio() == 1.0:
+            echo('has no diff, range from {} to {}'.format(up, down))
+            return False
+    except Exception as err:
+        echo(str(err))
+    return True
+
+
+def is_blnak(line):
+    return not line.strip('')
+
+
+def is_not_blank(line):
+    return line and not line.startswith(' ')
+
+
+def get_index(buffer, line):
+    return buffer[:].index(line)
